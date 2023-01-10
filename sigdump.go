@@ -10,6 +10,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Start sets up a signal handler for the signal specified by the SIGDUMP_SIGNAL
+// environment variable. If the environment variable is not set, the default signal is SIGCONT.
+// If the signal is received, a runtime stack trace, and memory profile
+// of the process will be written to the file specified by the SIGDUMP_PATH environment variable.
+// If the environment variable is not set, the default file is /tmp/sigdump-<pid>.log.
+// If the value of SIGDUMP_PATH is - the stack trace is written to the stdout.
+// If the value of SIGDUMP_PATH is + the stack trace is written to the stderr.
+// The stack trace includes the current time, hostname, pid, ppid and signal.
 func Start() {
 	signalStr := os.Getenv("SIGDUMP_SIGNAL")
 	if signalStr == "" {
