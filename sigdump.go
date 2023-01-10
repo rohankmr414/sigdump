@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -12,8 +13,8 @@ import (
 
 // Start sets up a signal handler for the signal specified by the SIGDUMP_SIGNAL
 // environment variable. If the environment variable is not set, the default signal is SIGCONT.
-// If the signal is received, a runtime stack trace, and memory profile
-// of the process will be written to the file specified by the SIGDUMP_PATH environment variable.
+// If the signal is received, a runtime stack trace and memory profile of the process
+// will be written to the file specified by the SIGDUMP_PATH environment variable.
 // If the environment variable is not set, the default file is /tmp/sigdump-<pid>.log.
 // If the value of SIGDUMP_PATH is - the stack trace is written to the stdout.
 // If the value of SIGDUMP_PATH is + the stack trace is written to the stderr.
@@ -44,12 +45,15 @@ func dumpStack(s os.Signal) {
 	buf := make([]byte, 1<<16)
 	n := runtime.Stack(buf, true)
 
+	buf = []byte(strings.ReplaceAll("  "+string(buf[:n]), "\n", "\n\t"))
+	buf = []byte(strings.ReplaceAll(string(buf), "\tgoroutine ", "  goroutine "))
 	path := os.Getenv("SIGDUMP_PATH")
 	if path == "" {
 		path = fmt.Sprintf("/tmp/sigdump-%d.log", os.Getpid())
 	}
 
 	var w *os.File
+
 	if path == "-" {
 		w = os.Stdout
 	} else if path == "+" {
@@ -60,129 +64,53 @@ func dumpStack(s os.Signal) {
 		if err != nil {
 			return
 		}
-		defer w.Close()
+		defer func(w *os.File) {
+			err = w.Close()
+			if err != nil {
+				return
+			}
+		}(w)
 	}
 
 	now := time.Now().Format(time.RFC3339)
 	hostname, _ := os.Hostname()
 	pid := os.Getpid()
 	ppid := os.Getppid()
-	_, err := fmt.Fprintf(w, "time=%s host=%s pid=%d ppid=%d signal=%s\n%s", now, hostname, pid, ppid, s, buf[:n])
-	if err != nil {
-		return
-	}
+	sb := new(strings.Builder)
+	sb.WriteString(fmt.Sprintf("Sigdump time=%s host=%s pid=%d ppid=%d signal=%s\n%s\n", now, hostname, pid, ppid, s, buf[:n]))
 
-	_, err = fmt.Fprintf(w, "\nmemory profile:\n")
-	if err != nil {
-		return
-	}
+	sb.WriteString("\n  Mem Stat:\n")
 	memStats := &runtime.MemStats{}
 	runtime.ReadMemStats(memStats)
-	_, err = fmt.Fprintf(w, "Alloc = %v\n", memStats.Alloc)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "TotalAlloc = %v\n", memStats.TotalAlloc)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "Sys = %v\n", memStats.Sys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "Lookups = %v\n", memStats.Lookups)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "Mallocs = %v\n", memStats.Mallocs)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "Frees = %v\n", memStats.Frees)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "HeapAlloc = %v\n", memStats.HeapAlloc)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "HeapSys = %v\n", memStats.HeapSys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "HeapIdle = %v\n", memStats.HeapIdle)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "HeapInuse = %v\n", memStats.HeapInuse)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "HeapReleased = %v\n", memStats.HeapReleased)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "HeapObjects = %v\n", memStats.HeapObjects)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "StackInuse = %v\n", memStats.StackInuse)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "StackSys = %v\n", memStats.StackSys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "MSpanInuse = %v\n", memStats.MSpanInuse)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "MSpanSys = %v\n", memStats.MSpanSys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "MCacheInuse = %v\n", memStats.MCacheInuse)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "MCacheSys = %v\n", memStats.MCacheSys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "BuckHashSys = %v\n", memStats.BuckHashSys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "GCSys = %v\n", memStats.GCSys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "OtherSys = %v\n", memStats.OtherSys)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "NextGC = %v\n", memStats.NextGC)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "LastGC = %v\n", memStats.LastGC)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "PauseTotalNs = %v\n", memStats.PauseTotalNs)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "NumGC = %v\n", memStats.NumGC)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "GCCPUFraction = %v\n", memStats.GCCPUFraction)
-	if err != nil {
-		return
-	}
-	_, err = fmt.Fprintf(w, "DebugGC = %v\n", memStats.DebugGC)
+	sb.WriteString(fmt.Sprintf("\tAlloc = %v\n", memStats.Alloc))
+	sb.WriteString(fmt.Sprintf("\tTotalAlloc = %v\n", memStats.TotalAlloc))
+	sb.WriteString(fmt.Sprintf("\tSys = %v\n", memStats.Sys))
+	sb.WriteString(fmt.Sprintf("\tLookups = %v\n", memStats.Lookups))
+	sb.WriteString(fmt.Sprintf("\tMallocs = %v\n", memStats.Mallocs))
+	sb.WriteString(fmt.Sprintf("\tFrees = %v\n", memStats.Frees))
+	sb.WriteString(fmt.Sprintf("\tHeapAlloc = %v\n", memStats.HeapAlloc))
+	sb.WriteString(fmt.Sprintf("\tHeapSys = %v\n", memStats.HeapSys))
+	sb.WriteString(fmt.Sprintf("\tHeapIdle = %v\n", memStats.HeapIdle))
+	sb.WriteString(fmt.Sprintf("\tHeapInuse = %v\n", memStats.HeapInuse))
+	sb.WriteString(fmt.Sprintf("\tHeapReleased = %v\n", memStats.HeapReleased))
+	sb.WriteString(fmt.Sprintf("\tHeapObjects = %v\n", memStats.HeapObjects))
+	sb.WriteString(fmt.Sprintf("\tStackInuse = %v\n", memStats.StackInuse))
+	sb.WriteString(fmt.Sprintf("\tStackSys = %v\n", memStats.StackSys))
+	sb.WriteString(fmt.Sprintf("\tMSpanInuse = %v\n", memStats.MSpanInuse))
+	sb.WriteString(fmt.Sprintf("\tMSpanSys = %v\n", memStats.MSpanSys))
+	sb.WriteString(fmt.Sprintf("\tMCacheInuse = %v\n", memStats.MCacheInuse))
+	sb.WriteString(fmt.Sprintf("\tMCacheSys = %v\n", memStats.MCacheSys))
+	sb.WriteString(fmt.Sprintf("\tBuckHashSys = %v\n", memStats.BuckHashSys))
+	sb.WriteString(fmt.Sprintf("\tGCSys = %v\n", memStats.GCSys))
+	sb.WriteString(fmt.Sprintf("\tOtherSys = %v\n", memStats.OtherSys))
+	sb.WriteString(fmt.Sprintf("\tNextGC = %v\n", memStats.NextGC))
+	sb.WriteString(fmt.Sprintf("\tLastGC = %v\n", memStats.LastGC))
+	sb.WriteString(fmt.Sprintf("\tPauseTotalNs = %v\n", memStats.PauseTotalNs))
+	sb.WriteString(fmt.Sprintf("\tNumGC = %v\n", memStats.NumGC))
+	sb.WriteString(fmt.Sprintf("\tGCCPUFraction = %v\n", memStats.GCCPUFraction))
+	sb.WriteString(fmt.Sprintf("\tDebugGC = %v\n", memStats.DebugGC))
+
+	_, err := w.Write([]byte(sb.String()))
 	if err != nil {
 		return
 	}
