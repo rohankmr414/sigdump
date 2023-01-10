@@ -77,7 +77,7 @@ func dumpStack(s os.Signal) {
 	pid := os.Getpid()
 	ppid := os.Getppid()
 	sb := new(strings.Builder)
-	sb.WriteString(fmt.Sprintf("Sigdump time=%s host=%s pid=%d ppid=%d signal=%s\n%s\n", now, hostname, pid, ppid, s, buf[:n]))
+	sb.WriteString(fmt.Sprintf("Sigdump time=%s host=%s pid=%d ppid=%d signal=%s\n%s\n", now, hostname, pid, ppid, unix.SignalName(s.(unix.Signal)), buf[:n]))
 
 	sb.WriteString("\n  Mem Stat:\n")
 	memStats := &runtime.MemStats{}
